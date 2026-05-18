@@ -30,6 +30,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 STATE_FILE     = "coinbase_state.json"
 TRADE_LOG_FILE = "coinbase_trades.json"
 
+PAPER_MODE = True   # ← set False only when ready for real money
+
 # Trading parameters
 CAPITAL_PER_TRADE  = 200.0    # USD per trade
 MIN_PROFIT_PCT     = 1.5      # minimum expected profit % to enter
@@ -236,6 +238,10 @@ class CoinbaseClient:
         elif side.upper() == "SELL" and base_size:
             body["order_configuration"]["market_market_ioc"]["base_size"] = str(base_size)
 
+        if PAPER_MODE:
+            log.info("📄 PAPER ORDER skipped (real API call blocked): %s %s", side.upper(), symbol)
+            return {"order_id": "paper-" + body["client_order_id"], "paper": True}
+
         data = self._request("POST", "/api/v3/brokerage/orders", body=body)
         if data and data.get("success"):
             return data.get("success_response", {})
@@ -429,6 +435,7 @@ class CoinbaseBot:
 
             send_telegram(
                 f"🟡 Coinbase Bot is online!\n"
+                f"Mode: {'PAPER 🧪' if PAPER_MODE else 'LIVE 💰'}\n"
                 f"USD Balance: ${balance:,.2f}\n"
                 f"Capital per trade: ${CAPITAL_PER_TRADE}\n"
                 f"Scanning {len(SYMBOLS)} crypto pairs\n"
