@@ -27,30 +27,36 @@ CB_API_SECRET = os.getenv("COINBASE_API_SECRET")
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-STATE_FILE     = "coinbase_state.json"
-TRADE_LOG_FILE = "coinbase_trades.json"
+DATA_DIR       = "/app/data"
+os.makedirs(DATA_DIR, exist_ok=True)
+STATE_FILE     = os.path.join(DATA_DIR, "coinbase_state.json")
+TRADE_LOG_FILE = os.path.join(DATA_DIR, "coinbase_trades.json")
 
 PAPER_MODE = True   # ← set False only when ready for real money
 
 # Trading parameters
 CAPITAL_PER_TRADE  = 200.0    # USD per trade
-MIN_PROFIT_PCT     = 1.5      # minimum expected profit % to enter
-STOP_LOSS_PCT      = 1.0      # stop loss % below entry
-TAKE_PROFIT_PCT    = 2.0      # take profit % above entry
-MAX_POSITIONS      = 5        # max open positions at once
+MIN_PROFIT_PCT     = 0.8      # lowered from 1.5 — triggers more entries
+STOP_LOSS_PCT      = 1.5      # widened from 1.0 — less likely to stop out early
+TAKE_PROFIT_PCT    = 1.5      # lowered from 2.0 — closes faster
+MAX_POSITIONS      = 8        # increased from 5 — holds more trades at once
 POLL_INTERVAL      = 60       # seconds between scans
 
 # Technical filter thresholds
-RSI_MIN            = 52       # RSI must be above this to buy
+RSI_MIN            = 50       # lowered from 52 — more lenient entry
 RSI_PERIOD         = 14
-SMA_PERIOD         = 20       # price must be above 20-period SMA
-VOLUME_MULT        = 1.3      # volume must be 1.3x average
+SMA_PERIOD         = 10       # shortened from 20 — faster trend detection
+VOLUME_MULT        = 1.1      # lowered from 1.3 — less strict volume spike
+
+# Signal mode: "all" = need price+RSI+volume, "any2" = need 2 of 3
+SIGNAL_MODE        = "any2"
 
 # Symbols to trade (Coinbase Advanced format)
 SYMBOLS = [
-    "BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD",
-    "LINK-USD", "MATIC-USD", "DOT-USD", "ADA-USD",
-    "DOGE-USD", "UNI-USD", "ATOM-USD", "LTC-USD",
+    "BTC-USD",  "ETH-USD",  "SOL-USD",  "AVAX-USD",
+    "LINK-USD", "MATIC-USD","DOT-USD",  "ADA-USD",
+    "DOGE-USD", "UNI-USD",  "ATOM-USD", "LTC-USD",
+    "XRP-USD",  "BCH-USD",  "SHIB-USD", "NEAR-USD",
 ]
 
 BASE_URL = "https://api.coinbase.com"
@@ -427,7 +433,11 @@ def analyse(client: CoinbaseClient, symbol: str) -> dict:
     stop_loss   = entry * (1 - STOP_LOSS_PCT / 100)
     take_profit = entry * (1 + TAKE_PROFIT_PCT / 100)
 
-    if above_sma and rsi_ok and volume_ok and macd_ok:
+    # any2 mode: need 3 of 4 conditions (or all 4 in strict mode)
+    bull_score = sum([above_sma, rsi_ok, volume_ok, macd_ok])
+    trigger    = (bull_score >= 3) if SIGNAL_MODE == "any2" else (bull_score == 4)
+
+    if trigger:
         result["signal"]      = "buy"
         result["entry_price"] = entry
         result["stop_loss"]   = stop_loss
