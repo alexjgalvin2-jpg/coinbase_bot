@@ -472,6 +472,14 @@ class CoinbaseBot:
     def __init__(self):
         self.client     = CoinbaseClient()
         self.positions  = self._load_state()
+        self.state      = {"positions": self.positions}
+        # Load all-time P&L from trade log so it survives restarts
+        try:
+            with open(TRADE_LOG_FILE) as f:
+                _trades = json.load(f)
+            self.session_pnl = sum(t.get("pnl_usd", 0) for t in _trades if t.get("action") == "sell")
+        except Exception:
+            self.session_pnl = 0.0
 
     def _load_state(self) -> dict:
         try:
